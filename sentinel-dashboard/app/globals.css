@@ -1,0 +1,262 @@
+@import "tailwindcss";
+
+/* ============================================
+   SENTINEL-SQUARE DESIGN SYSTEM
+   ============================================ */
+
+:root {
+  /* Core palette */
+  --bg-primary: #05080f;
+  --bg-card: rgba(13, 17, 28, 0.7);
+  --bg-card-hover: rgba(18, 24, 40, 0.8);
+  --border-glass: rgba(255, 255, 255, 0.06);
+  --border-glass-hover: rgba(255, 255, 255, 0.12);
+
+  /* Accents */
+  --binance-yellow: #f0b90b;
+  --binance-yellow-dim: rgba(240, 185, 11, 0.15);
+  --success: #00c48c;
+  --success-dim: rgba(0, 196, 140, 0.15);
+  --error: #ff6b6b;
+  --error-dim: rgba(255, 107, 107, 0.15);
+  --warning: #ffab00;
+  --warning-dim: rgba(255, 171, 0, 0.15);
+  --info: #6c8cff;
+  --info-dim: rgba(108, 140, 255, 0.15);
+
+  /* Text */
+  --text-primary: #e8ecf4;
+  --text-secondary: #7b8ba5;
+  --text-tertiary: #4a5568;
+
+  /* Typography */
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* ============================================
+   BASE
+   ============================================ */
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+/* Subtle grid background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Top gradient glow */
+body::after {
+  content: "";
+  position: fixed;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120%;
+  height: 60%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(240, 185, 11, 0.04) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================
+   GLASS CARD
+   ============================================ */
+
+.glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-glass-hover);
+}
+
+/* ============================================
+   PULSE ANIMATIONS
+   ============================================ */
+
+@keyframes pulse-green {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 196, 140, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 196, 140, 0);
+  }
+}
+
+@keyframes pulse-amber {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 171, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 171, 0, 0);
+  }
+}
+
+@keyframes pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
+  }
+}
+
+.pulse-green {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.pulse-amber {
+  animation: pulse-amber 2s ease-in-out infinite;
+}
+
+.pulse-red {
+  animation: pulse-red 2s ease-in-out infinite;
+}
+
+/* ============================================
+   COUNTDOWN DIGITS
+   ============================================ */
+
+@keyframes digit-flip {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.digit-change {
+  animation: digit-flip 0.3s ease-out;
+}
+
+/* ============================================
+   LOG STREAM
+   ============================================ */
+
+.log-stream {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.log-stream::-webkit-scrollbar {
+  width: 4px;
+}
+
+.log-stream::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.log-entry {
+  animation: log-slide-in 0.3s ease-out;
+}
+
+@keyframes log-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   STAT BAR NUMBER TRANSITIONS
+   ============================================ */
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.stat-value {
+  animation: count-up 0.4s ease-out;
+}
+
+/* ============================================
+   PERSONA BADGES
+   ============================================ */
+
+.badge-technical {
+  background: var(--info-dim);
+  color: var(--info);
+  border: 1px solid rgba(108, 140, 255, 0.2);
+}
+.badge-news {
+  background: var(--binance-yellow-dim);
+  color: var(--binance-yellow);
+  border: 1px solid rgba(240, 185, 11, 0.2);
+}
+.badge-educator {
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid rgba(0, 196, 140, 0.2);
+}
+.badge-community {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+/* ============================================
+   SHIMMER LOADING
+   ============================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.02) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite;
+}

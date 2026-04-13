@@ -1,0 +1,34 @@
+# Environment variables (SECURITY CRITICAL)
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Runtime logs
+activity.log
+*.log
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
