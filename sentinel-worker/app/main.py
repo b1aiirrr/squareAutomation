@@ -1,72 +1,65 @@
-from __future__ import annotations
+"""
+Sentinel-Square — Main Entry Point
+====================================
+Starts the FastAPI status server and the content scheduling engine.
+Run with: python main.py
+"""
 
-import asyncio
-import json
+import signal
+import logging
+import uvicorn
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from config import API_HOST, API_PORT
 
-from .scheduler import Scheduler
-from .state import SharedState
-
-BASE_DIR = Path(__file__).resolve().parents[1]
-POSTS_FILE = BASE_DIR / "data" / "posts.json"
-
-state = SharedState()
-app = FastAPI(title="Sentinel Worker", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s │ %(name)-22s │ %(levelname)-7s │ %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+logger = logging.getLogger("sentinel")
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    scheduler = Scheduler(state=state, posts_path=POSTS_FILE)
-    asyncio.create_task(scheduler.run())
-    await state.add_log("info", "Scheduler started")
+BANNER = r"""
+  ____  _____ _   _ _____ ___ _   _ _____ _
+ / ___|| ____| \ | |_   _|_ _| \ | | ____| |
+ \___ \|  _| |  \| | | |  | ||  \| |  _| | |
+  ___) | |___| |\  | | |  | || |\  | |___| |___
+ |____/|_____|_| \_| |_| |___|_| \_|_____|_____|
+  ____   ___  _   _   _    ____  _____
+ / ___| / _ \| | | | / \  |  _ \| ____|
+ \___ \| | | | | | |/ _ \ | |_) |  _|
+  ___) | |_| | |_| / ___ \|  _ <| |___
+ |____/ \__\_\\___/_/   \_\_| \_\_____|   v5.0
 
+ Autonomous Content & Rewards Engine for Binance Square
+ by Blair Momanyi
+"""
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"ok": "true"}
+def main():
+    print(BANNER)
+    logger.info("Starting Sentinel-Square Worker v5.0")
 
+    from scheduler import start_scheduler, stop_scheduler
+    from state import SharedState
+    from api import app
 
-@app.get("/status")
-async def status() -> dict:
-    return await state.snapshot()
+    state = SharedState()
+    posts_path = Path("posts.json")
 
+    def _shutdown(sig, frame):
+        logger.info(f"Received signal {sig}, shutting down...")
+        stop_scheduler()
+        raise SystemExit(0)
 
-@app.get("/posts")
-async def posts(limit: int = 50) -> dict:
-    items = state.post_history[-limit:]
-    return {"count": len(items), "items": items}
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
 
+    import asyncio
+    asyncio.run(start_scheduler(state, posts_path))
 
-@app.get("/events")
-async def events(request: Request) -> StreamingResponse:
-    queue: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
-    state.subscribers.add(queue)
+    logger.info(f"API server starting on {API_HOST}:{API_PORT}")
+    uvicorn.run(app, host=API_HOST, port=API_PORT, log_level="warning")
 
-    async def event_generator():
-        try:
-            await state.add_log("info", "Dashboard client connected to SSE stream")
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    item = await asyncio.wait_for(queue.get(), timeout=15)
-                    yield f"data: {item}\n\n"
-                except asyncio.TimeoutError:
-                    keep_alive = json.dumps({"type": "keepalive"})
-                    yield f"data: {keep_alive}\n\n"
-        finally:
-            state.subscribers.discard(queue)
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+if __name__ == "__main__":
+    main()
