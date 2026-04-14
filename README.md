@@ -1,7 +1,7 @@
 # 🚀 Sentinel Square — Autonomous Content & Trading Engine
 
 > **The world's most advanced autonomous Binance Square agent.**
-> Built by [@MOMIGI](https://x.com) — Copyright © 2025 MOMIGI. All rights reserved.
+> Built by [@MOMIGI](https://x.com) — Copyright © 2026 MOMIGI. All rights reserved.
 
 [![Vercel](https://img.shields.io/badge/Vercel-Ready-black?style=flat-square&logo=vercel)](https://vercel.com)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
@@ -308,7 +308,7 @@ vercel --prod
 
 ## 📝 License
 
-> **Copyright © 2025 MOMIGI. All rights reserved.**
+> **Copyright © 2026 MOMIGI. All rights reserved.**
 
 This project is proprietary software. Unauthorized copying, distribution, or use is strictly prohibited.
 

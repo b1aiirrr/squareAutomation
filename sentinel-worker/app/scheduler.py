@@ -24,8 +24,8 @@ from config import (
     BINANCE_SQUARE_API_KEY,
     FRIEND_SQUARE_API_KEY,
 )
-from engine import run_cycle, daily_reset, recalculate_sleep_window, init_trading, load_posts, save_posts, get_state
-from rewards_engine import RewardsEngine
+from .engine import run_cycle, daily_reset, recalculate_sleep_window, init_trading, load_posts, save_posts, get_state
+from .rewards_engine import RewardsEngine
 from binance.client import Client
 
 logger = logging.getLogger("sentinel.scheduler")

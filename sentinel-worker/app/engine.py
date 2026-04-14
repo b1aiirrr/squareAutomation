@@ -125,7 +125,7 @@ def save_posts(path, posts):
 # Content Generation (Advanced)
 # ---------------------------------------------------------------------------
 def generate_content_mock(persona: str) -> tuple[str, list[str]]:
-    from content_generator import CONTENT_TEMPLATES, ENGAGEMENT_TRIGGERS, SPECIAL_TICKERS, should_add_referral, format_referral_cta
+    from .content_generator import CONTENT_TEMPLATES, ENGAGEMENT_TRIGGERS, SPECIAL_TICKERS, should_add_referral, format_referral_cta
 
     templates = CONTENT_TEMPLATES.get(persona, CONTENT_TEMPLATES["community"])
     template = random.choice(templates)
@@ -272,15 +272,36 @@ async def run_cycle(state) -> dict:
             f"at ${trade_info['entry']:.4f}. Target: ${trade_info['tp']:.4f}. "
             f"Stop: ${trade_info['sl']:.4f}. 🚀📈 #Trading #BinanceSquare"
         )
-        await publish_to_square(trade_report, BINANCE_SQUARE_API_KEY)
+        primary_trade = await publish_to_square(trade_report, BINANCE_SQUARE_API_KEY)
+        if primary_trade["success"]:
+            await state.add_log("info", f"Trade report posted to Primary: {primary_trade['post_url']}")
+        else:
+            await state.add_log("error", f"Primary Trade Post failed: {primary_trade.get('error')}")
+
         if FRIEND_SQUARE_API_KEY:
-            await publish_to_square(trade_report, FRIEND_SQUARE_API_KEY)
-        await state.add_log("info", "Trade report posted to both accounts")
+            friend_trade = await publish_to_square(trade_report, FRIEND_SQUARE_API_KEY)
+            if friend_trade["success"]:
+                await state.add_log("info", f"Trade report cross-posted to Friend: {friend_trade['post_url']}")
+            else:
+                await state.add_log("error", f"Friend Trade Post failed: {friend_trade.get('error')}")
+        else:
+            await state.add_log("warning", "Friend Account API Key missing - skipping cross-post")
 
     # Post main content to both accounts
     primary_result = await publish_to_square(content, BINANCE_SQUARE_API_KEY)
+    if primary_result["success"]:
+        await state.add_log("info", f"Main post published to Primary: {primary_result['post_url']}")
+    else:
+        await state.add_log("error", f"Primary Main Post failed: {primary_result.get('error')}")
+
     if FRIEND_SQUARE_API_KEY:
-        await publish_to_square(content, FRIEND_SQUARE_API_KEY)
+        friend_result = await publish_to_square(content, FRIEND_SQUARE_API_KEY)
+        if friend_result["success"]:
+            await state.add_log("info", f"Main post cross-posted to Friend: {friend_result['post_url']}")
+        else:
+            await state.add_log("error", f"Friend Main Post failed: {friend_result.get('error')}")
+    else:
+        await state.add_log("warning", "Friend Account API Key missing - skipping cross-post")
 
     # Save post
     payload = {
