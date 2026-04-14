@@ -1,12 +1,11 @@
 """
-Sentinel-Square Core Engine
+Sentinel-Square Core Engine v5
 =============================
 Orchestrates the full content cycle: checks sleep window, generates content
 via the LLM, executes trades if bullish, publishes to Binance Square.
 """
 
 import asyncio
-import json
 import logging
 import random
 import re
@@ -14,8 +13,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import httpx
-from binance.client import Client
-from binance.exceptions import BinanceAPIException
 
 logger = logging.getLogger("sentinel.engine")
 
@@ -30,9 +27,6 @@ TIMEZONE = os.getenv("TIMEZONE", "Africa/Nairobi")
 SLEEP_START_HOUR = int(os.getenv("SLEEP_WINDOW_START", "2"))
 SLEEP_END_HOUR = int(os.getenv("SLEEP_WINDOW_END", "7"))
 DAILY_POST_TARGET = int(os.getenv("DAILY_POST_TARGET", "40"))
-TRADE_PERCENT_OF_WALLET = float(os.getenv("TRADE_PERCENT_OF_WALLET", "0.01"))
-STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.02"))
-TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.05"))
 
 BINANCE_SQUARE_API_KEY = os.getenv("BINANCE_SQUARE_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -43,88 +37,6 @@ BINANCE_REFERRAL_LINK = os.getenv("BINANCE_REFERRAL_LINK", "")
 REFERRAL_CHANCE = 0.20
 
 BINANCE_POST_URL = "https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add"
-
-# Trading client
-_binance_client = None
-if TRADING_API_KEY and TRADING_API_SECRET:
-    try:
-        _binance_client = Client(TRADING_API_KEY, TRADING_API_SECRET)
-        logger.info("Binance trading client initialized")
-    except Exception as e:
-        logger.error(f"Failed to init trading client: {e}")
-
-# ---------------------------------------------------------------------------
-# Persona System (The Lively Overhaul)
-# ---------------------------------------------------------------------------
-SHARED_INSTRUCTIONS = (
-    "You are Blair — a sharp, street-smart crypto trader who codes on a ThinkPad. "
-    "You've been in the game since the 2017 ICO craze and survived the 2022 deleveraging. "
-    "You speak in 'trader-vernacular' — think CT (Crypto Twitter) but professional enough for Binance Square. "
-    "No robotic headers, no 'Hey everyone', no formal greetings. "
-    "Every post MUST start with a 'Hook' (a sharp question, a contrarian take, or a direct observation). "
-    "Use 2-3 specific $TICKERS (e.g. $BTC, $BNB, $SOL) and include emojis naturally. "
-    "Line breaks are mandatory for readability. NO markdown (no **, no ##)."
-)
-
-PERSONA_PROMPTS = {
-    "technical": (
-        f"{SHARED_INSTRUCTIONS} "
-        "Strategy: Technical Sniper. You focus on liquidity zones, order blocks, and 4H/1D trend shifts. "
-        "You're not a moonboy; you're looking for where the big money is positioned. "
-        "Mention specific price levels for $BTC or $BNB. Talk about 'sweeping lows' or 'retesting the breakout'. "
-        "Tone: Analytical, objective, slightly cynical of 'retail' indicators like basic RSI. "
-        "Hashtags: #TechnicalAnalysis #TradingTips #PriceAction."
-    ),
-    "news": (
-        f"{SHARED_INSTRUCTIONS} "
-        "Strategy: Narrative Hunter. You connect the dots between macro (Fed, CPI, DXY) and crypto price action. "
-        "You're watching ETF inflows like a hawk. You understand how global liquidity drives $BTC. "
-        "React to breaking news with 'Signal vs Noise' analysis. "
-        "Tone: Fast-paced, informed, focused on the 'Big Picture'. "
-        "Hashtags: #CryptoNews #Macro #MarketUpdate."
-    ),
-    "educator": (
-        f"{SHARED_INSTRUCTIONS} "
-        "Strategy: Ecosystem Architect. You deep dive into #BNBChain, RWA (Real World Assets), and liquid staking. "
-        "You explain *why* a project has value, not just that the price is up. "
-        "Break down complex DeFi concepts into 3-4 punchy insights that a a dev would respect. "
-        "Tone: Knowledgeable, authoritative, forward-thinking. "
-        "Hashtags: #BNBChain #DeFi #Web3Education."
-    ),
-    "community": (
-        f"{SHARED_INSTRUCTIONS} "
-        "Strategy: Sentiment Pulse. You're the voice of reason during panics and the reality check during mania. "
-        "Share hard truths about trading psychology, risk management, and 'diamond hands' vs 'smart money'. "
-        "Ask questions that make people rethink their bias. "
-        "Tone: Relatable, experienced, slightly mentor-like but still 'one of us'. "
-        "Hashtags: #CryptoCommunity #TradingPsychology #HODL."
-    ),
-}
-
-PERSONA_WEIGHTS = {"technical": 0.30, "news": 0.20, "educator": 0.20, "community": 0.30}
-
-ENGAGEMENT_TRIGGERS = [
-    "Drop your targets below 📉.",
-    "Is $BNB ready for the breakout or are we heading back to support?",
-    "What's your $BTC target for EOY?",
-    "Agree or am I missing something? Let me know in the comments.",
-    "Which $ALT are you watching this week?",
-]
-
-_refersal_link_ctas = [
-    f"Trading these levels on Binance? Get a fee discount here: {BINANCE_REFERRAL_LINK}",
-    f"Maximize your gains with lower fees. Join me on Binance: {BINANCE_REFERRAL_LINK}",
-    f"Still paying full fees? Use my link for a discount on Binance: {BINANCE_REFERRAL_LINK}",
-]
-
-# Gemini client
-try:
-    from google import genai
-    _gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-    _gemini_model = "gemini-2.5-flash"
-except:
-    _gemini_client = None
-    logger.warning("Gemini client not initialized")
 
 # ---------------------------------------------------------------------------
 # Sleep Window
@@ -147,6 +59,9 @@ def is_sleeping() -> bool:
     if start_hour < end_hour:
         return start_hour <= current_hour < end_hour
     return current_hour >= start_hour or current_hour < end_hour
+
+def _now() -> datetime:
+    return datetime.now(_tz)
 
 # ---------------------------------------------------------------------------
 # Binance Square Publishing
@@ -174,39 +89,91 @@ async def publish_to_square(content: str, api_key: str) -> dict:
         return {"success": False, "error": str(e)}
 
 # ---------------------------------------------------------------------------
-# Content Generation
+# State Management
+# ---------------------------------------------------------------------------
+_state = None
+_posts = []
+
+def set_state(state):
+    global _state
+    _state = state
+
+def get_state():
+    return _state
+
+def load_posts(path):
+    global _posts
+    import json
+    from pathlib import Path
+    p = Path(path) if isinstance(path, str) else path
+    if p.exists():
+        try:
+            with open(p) as f:
+                _posts = json.load(f)
+        except:
+            _posts = []
+    return _posts
+
+def save_posts(path, posts):
+    import json
+    from pathlib import Path
+    p = Path(path) if isinstance(path, str) else path
+    with open(p, "w") as f:
+        json.dump(posts[-500:], f, indent=2, default=str)
+
+# ---------------------------------------------------------------------------
+# Content Generation (Advanced)
 # ---------------------------------------------------------------------------
 def generate_content_mock(persona: str) -> tuple[str, list[str]]:
-    templates = {
-        "technical": [
-            "$BTC just swept the lows at $96,200. Time to watch for a reversal signal. If $BNB holds $580, we're heading back up 🚀 #TechnicalAnalysis",
-            "The 4H chart on $ETH is painting a bull flag. Support at $2,850 is the key. Break above $3,100 and we're flying 📈 #TradingTips",
-        ],
-        "news": [
-            "ETF inflows hitting $800M today. The macro tailwinds are aligning for risk assets. DXY dropping = crypto rip 📊 #Macro",
-            "Fed still dovish in this environment. Global liquidity is expanding. Bull case for $BTC strengthening 🚀 #CryptoNews",
-        ],
-        "educator": [
-            "RWA tokenization is the future. $BNB is positioning itself as the backbone for real-world asset DeFi. Here's why it matters 🎓 #BNBChain #DeFi",
-            "Liquid staking on BNB Chain lets you earn yield without locking your assets. The flexibility is underrated 💰 #Web3Education",
-        ],
-        "community": [
-            "Hard truth: most traders lose because they don't manage risk properly. 2% rule exists for a reason. Stay disciplined 💎 #TradingPsychology",
-            "What's your $BTC entry? And more importantly - what's your exit strategy? Share below 👇 #CryptoCommunity",
-        ],
+    from content_generator import CONTENT_TEMPLATES, ENGAGEMENT_TRIGGERS, SPECIAL_TICKERS, should_add_referral, format_referral_cta
+
+    templates = CONTENT_TEMPLATES.get(persona, CONTENT_TEMPLATES["community"])
+    template = random.choice(templates)
+
+    mock_prices = {
+        "BTC": 96450.0, "ETH": 3450.0, "BNB": 625.0, "SOL": 198.0,
+        "MATIC": 0.89, "ADA": 0.58, "AVAX": 38.50, "DOT": 7.85,
+        "LINK": 18.20, "ARB": 1.12
     }
-    body = random.choice(templates[persona])
-    tickers = list(set(re.findall(r"\$[A-Z]{2,10}", body.upper())))
-    return body, tickers
+
+    tickers_in_template = re.findall(r"\$[A-Z]{2,10}", template["hook"])
+    if not tickers_in_template:
+        tickers_in_template = [f"${random.choice(SPECIAL_TICKERS)}"]
+
+    tickers = [t.replace("$", "") for t in tickers_in_template]
+
+    content = template["hook"]
+    for ticker in tickers:
+        if ticker in mock_prices:
+            price = mock_prices[ticker]
+            if price > 1000:
+                content = content.replace("${}", f"${price:.0f}", 1)
+            else:
+                content = content.replace("${}", f"${price:.2f}", 1)
+
+    primary_ticker = tickers[0]
+    if f"${primary_ticker}" not in content:
+        content = content.replace("$", f"${primary_ticker} ", 1)
+
+    tags = " ".join([f"#{t}" for t in template["tags"]])
+    trigger = random.choice(ENGAGEMENT_TRIGGERS)
+    content = f"{content}\n\n{trigger}\n\n{tags}"
+
+    return content, [f"${t}" for t in tickers]
 
 # ---------------------------------------------------------------------------
 # Trading Execution
 # ---------------------------------------------------------------------------
-async def execute_trade_if_bullish(state, content: str, tickers: list[str]) -> dict | None:
-    if not _binance_client:
+_trading_client = None
+if TRADING_API_KEY and TRADING_API_SECRET:
+    from binance.client import Client
+    _trading_client = Client(TRADING_API_KEY, TRADING_API_SECRET)
+
+async def execute_trade_if_bullish(content: str, tickers: list[str]) -> dict | None:
+    if not _trading_client:
         return None
 
-    bullish_indicators = ["bullish", "long", "breakout", "🚀", "📈", "buy", "target"]
+    bullish_indicators = ["bullish", "long", "breakout", "🚀", "📈", "buy", "accumulation", "support"]
     is_bullish = any(ind in content.lower() for ind in bullish_indicators)
 
     if not is_bullish or not tickers:
@@ -216,27 +183,29 @@ async def execute_trade_if_bullish(state, content: str, tickers: list[str]) -> d
     symbol = f"{ticker}USDT"
 
     try:
-        balance = _binance_client.get_asset_balance(asset="USDT")
+        balance = _trading_client.get_asset_balance(asset="USDT")
         usdt_balance = float(balance["free"])
 
         if usdt_balance <= 10:
-            await state.add_log("warning", f"Insufficient USDT balance: {usdt_balance}")
+            if _state:
+                await _state.add_log("warning", f"Insufficient USDT: {usdt_balance}")
             return None
 
-        trade_amount = usdt_balance * TRADE_PERCENT_OF_WALLET
+        trade_amount = usdt_balance * 0.01  # 1% position
         if trade_amount < 10:
             trade_amount = 10
 
-        avg_price = _binance_client.get_avg_price(symbol=symbol)
+        avg_price = _trading_client.get_avg_price(symbol=symbol)
         current_price = float(avg_price["price"])
         quantity = round(trade_amount / current_price, 4)
 
-        await state.add_log("info", f"Executing BUY for {quantity} {ticker} (~\${trade_amount:.2f})")
+        if _state:
+            await _state.add_log("info", f"SMART BUY: {quantity} {ticker} (~\${trade_amount:.2f})")
 
-        order = _binance_client.order_market_buy(symbol=symbol, quantity=quantity)
+        order = _trading_client.order_market_buy(symbol=symbol, quantity=quantity)
 
-        sl_price = round(current_price * (1 - STOP_LOSS_PCT), 4)
-        tp_price = round(current_price * (1 + TAKE_PROFIT_PCT), 4)
+        sl_price = round(current_price * 0.98, 4)
+        tp_price = round(current_price * 1.05, 4)
 
         trade_info = {
             "symbol": symbol,
@@ -247,40 +216,87 @@ async def execute_trade_if_bullish(state, content: str, tickers: list[str]) -> d
             "order_id": order["orderId"],
         }
 
-        await state.add_log("info", f"Trade done: {symbol} @ {current_price}. SL: {sl_price}, TP: {tp_price}")
-
-        trade_post = (
-            f"Just entered a long on ${ticker} at ${current_price}. "
-            f"Target: ${tp_price}. Stop: ${sl_price}. "
-            f"Let's see if the bulls hold! 🚀📈 #Trading #BinanceSquare"
-        )
-        await state.add_log("info", f"Trade post: {trade_post}")
+        if _state:
+            await _state.add_log("info", f"Trade: {symbol} @ {current_price} | SL: {sl_price} TP: {tp_price}")
 
         return trade_info
 
-    except BinanceAPIException as e:
-        await state.add_log("error", f"Binance API Error: {e.message}")
     except Exception as e:
-        await state.add_log("error", f"Trading Error: {str(e)}")
+        if _state:
+            await _state.add_log("error", f"Trading Error: {str(e)}")
+        logger.error(f"Trading error: {e}")
 
     return None
 
 # ---------------------------------------------------------------------------
-# Post Building
+# Daily Reset
 # ---------------------------------------------------------------------------
-def build_post() -> dict:
-    personas = list(PERSONA_WEIGHTS.keys())
-    weights = list(PERSONA_WEIGHTS.values())
+def daily_reset():
+    recalculate_sleep_window()
+    logger.info(f"Daily reset: {_sleep_window}")
+
+# ---------------------------------------------------------------------------
+# Init Trading
+# ---------------------------------------------------------------------------
+def init_trading(state):
+    global _state
+    _state = state
+    logger.info("Trading engine initialized")
+
+# ---------------------------------------------------------------------------
+# Run Cycle
+# ---------------------------------------------------------------------------
+async def run_cycle(state) -> dict:
+    global _posts
+
+    state.status = "running"
+
+    if is_sleeping():
+        await state.add_log("info", "Sleeping - skipping cycle")
+        return {"status": "skipped", "reason": "sleep_window"}
+
+    persona_weights = {"technical": 0.30, "news": 0.20, "educator": 0.20, "community": 0.30}
+    personas = list(persona_weights.keys())
+    weights = list(persona_weights.values())
     persona = random.choices(personas, weights=weights, k=1)[0]
 
     content, tickers = generate_content_mock(persona)
 
-    trigger = random.choice(ENGAGEMENT_TRIGGERS)
-    if trigger not in content:
-        content += f"\n\n{trigger}"
+    # Execute trade if bullish
+    trade_info = await execute_trade_if_bullish(content, tickers)
 
-    if BINANCE_REFERRAL_LINK and random.random() < REFERRAL_CHANCE:
-        cta = random.choice(_refersal_link_ctas)
-        content += f"\n\n{cta}"
+    # Post trade signal if trade executed
+    if trade_info:
+        trade_report = (
+            f"Just entered a long on ${trade_info['symbol'].replace('USDT', '')} "
+            f"at ${trade_info['entry']:.4f}. Target: ${trade_info['tp']:.4f}. "
+            f"Stop: ${trade_info['sl']:.4f}. 🚀📈 #Trading #BinanceSquare"
+        )
+        await publish_to_square(trade_report, BINANCE_SQUARE_API_KEY)
+        if FRIEND_SQUARE_API_KEY:
+            await publish_to_square(trade_report, FRIEND_SQUARE_API_KEY)
+        await state.add_log("info", "Trade report posted to both accounts")
 
-    return {"persona": persona, "content": content, "tickers": tickers}
+    # Post main content to both accounts
+    primary_result = await publish_to_square(content, BINANCE_SQUARE_API_KEY)
+    if FRIEND_SQUARE_API_KEY:
+        await publish_to_square(content, FRIEND_SQUARE_API_KEY)
+
+    # Save post
+    payload = {
+        "persona": persona,
+        "content": content,
+        "posted_at": datetime.utcnow().isoformat(),
+        "posted_date": datetime.utcnow().date().isoformat(),
+        "channel": "binance-square",
+        "trade_executed": bool(trade_info)
+    }
+    _posts.append(payload)
+    state.posts = _posts
+
+    if primary_result["success"]:
+        await state.add_log("info", f"Posted [{persona}]: {content[:60]}...")
+        return {"status": "success", "post_url": primary_result.get("post_url")}
+    else:
+        await state.add_log("error", f"Post failed: {primary_result.get('error')}")
+        return {"status": "failed"}
