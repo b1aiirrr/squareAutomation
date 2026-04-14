@@ -17,207 +17,133 @@ from config import (
     SLEEP_END_HOUR,
     DAILY_POST_TARGET,
     LOG_FILE,
+    FRIEND_SQUARE_API_KEY,
 )
 from generator import generate_post
 from publisher import publish_post
+from trading_engine import TradingEngine
+from .state import SharedState
 
 logger = logging.getLogger("sentinel.engine")
 
 # ---------------------------------------------------------------------------
-# Engine State (in-memory, reset on restart)
+# Global Trading Engine
 # ---------------------------------------------------------------------------
-_tz = ZoneInfo(TIMEZONE)
+_trading_engine = None
 
-state = {
-    "uptime_start": datetime.now(_tz).isoformat(),
-    "posts_today": 0,
-    "posts_total": 0,
-    "last_post": None,
-    "next_post_time": None,
-    "sleep_window": {
-        "start": f"{SLEEP_START_HOUR:02d}:00",
-        "end": f"{SLEEP_END_HOUR:02d}:00",
-    },
-    "is_sleeping": False,
-    "engine_status": "initializing",
-}
+def init_trading(state: SharedState):
+    global _trading_engine
+    _trading_engine = TradingEngine(state)
 
+# ---------------------------------------------------------------------------
+# Sleep Window & Reset
+# ---------------------------------------------------------------------------
+_sleep_window = {"start": f"{SLEEP_START_HOUR:02d}:00", "end": f"{SLEEP_END_HOUR:02d}:00"}
 
 def _now() -> datetime:
     return datetime.now(_tz)
 
-
-# ---------------------------------------------------------------------------
-# Sleep Window
-# ---------------------------------------------------------------------------
 def recalculate_sleep_window():
-    """
-    Generate a randomized 5-hour sleep window for today.
-    The start can shift ±1 hour from the configured SLEEP_START_HOUR.
-    """
+    global _sleep_window
     jitter = random.randint(-1, 1)
     start_hour = max(0, min(23, SLEEP_START_HOUR + jitter))
     end_hour = start_hour + 5
     if end_hour >= 24:
         end_hour = end_hour - 24
 
-    state["sleep_window"] = {
+    _sleep_window = {
         "start": f"{start_hour:02d}:00",
         "end": f"{end_hour:02d}:00",
     }
-    logger.info(
-        f"Sleep window set: {state['sleep_window']['start']} – "
-        f"{state['sleep_window']['end']} {TIMEZONE}"
-    )
-
+    logger.info(f"Sleep window set: {_sleep_window['start']} – {_sleep_window['end']} {TIMEZONE}")
 
 def is_sleeping() -> bool:
-    """Check if the current time falls within the sleep window."""
     now = _now()
-    start_hour = int(state["sleep_window"]["start"].split(":")[0])
-    end_hour = int(state["sleep_window"]["end"].split(":")[0])
-
+    start_hour = int(_sleep_window["start"].split(":")[0])
+    end_hour = int(_sleep_window["end"].split(":")[0])
     current_hour = now.hour
 
     if start_hour < end_hour:
-        sleeping = start_hour <= current_hour < end_hour
+        return start_hour <= current_hour < end_hour
     else:
-        # Wraps past midnight (e.g., 23:00 – 04:00)
-        sleeping = current_hour >= start_hour or current_hour < end_hour
+        return current_hour >= start_hour or current_hour < end_hour
 
-    state["is_sleeping"] = sleeping
-    return sleeping
-
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-def _log_activity(entry: dict):
-    """Append a structured JSON log entry to activity.log."""
-    entry["timestamp"] = _now().isoformat()
-    line = json.dumps(entry, ensure_ascii=False)
-
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
-
-    logger.debug(f"Logged: {entry.get('event', 'unknown')}")
-
-
-# ---------------------------------------------------------------------------
-# Daily Reset
-# ---------------------------------------------------------------------------
-def daily_reset():
-    """Reset daily counters and recalculate sleep window."""
-    prev_count = state["posts_today"]
-    state["posts_today"] = 0
+async def daily_reset(state: SharedState):
     recalculate_sleep_window()
-    _log_activity({
-        "event": "daily_reset",
-        "previous_day_posts": prev_count,
-        "new_sleep_window": state["sleep_window"],
-    })
-    logger.info(f"Daily reset complete. Yesterday's posts: {prev_count}")
-
+    await state.add_log("info", f"Daily reset complete. New sleep window: {_sleep_window['start']} - {_sleep_window['end']}")
 
 # ---------------------------------------------------------------------------
 # Core Content Cycle
 # ---------------------------------------------------------------------------
-async def run_cycle() -> dict:
+async def run_cycle(state: SharedState) -> dict:
     """
     Execute one content cycle:
     1. Check sleep window
     2. Check daily post limit
     3. Generate content
-    4. Publish to Binance Square
-    5. Log result
-
-    Returns the result dict for the scheduler.
+    4. Trade if bullish
+    5. Publish to Binance Square (Primary + Optional Friend)
+    6. Log result
     """
-    state["engine_status"] = "running"
+    state.status = "running"
 
-    # --- Sleep check ---
     if is_sleeping():
-        logger.info("Currently in sleep window — skipping cycle")
-        _log_activity({"event": "skipped", "reason": "sleep_window"})
+        await state.add_log("info", "Currently in sleep window — skipping cycle")
         return {"status": "skipped", "reason": "sleep_window"}
 
-    # --- Daily limit check ---
-    if state["posts_today"] >= DAILY_POST_TARGET:
-        logger.info(
-            f"Daily target reached ({state['posts_today']}/{DAILY_POST_TARGET}) "
-            "— skipping cycle"
-        )
-        _log_activity({"event": "skipped", "reason": "daily_limit_reached"})
+    # Daily limit check
+    snapshot = await state.snapshot()
+    if snapshot["posts_today"] >= DAILY_POST_TARGET:
+        await state.add_log("info", f"Daily target reached ({snapshot['posts_today']}/{DAILY_POST_TARGET})")
         return {"status": "skipped", "reason": "daily_limit_reached"}
 
     # --- Generate content ---
     try:
         post_data = await generate_post()
     except Exception as e:
-        logger.error(f"Content generation failed: {e}")
-        _log_activity({
-            "event": "generation_failed",
-            "error": str(e),
-        })
+        await state.add_log("error", f"Content generation failed: {e}")
         return {"status": "error", "reason": f"generation_failed: {e}"}
 
     persona = post_data["persona"]
     content = post_data["content"]
+    tickers = post_data["tickers"]
 
-    # --- Publish ---
+    # --- Task 2: Trading Engine ---
+    trade_info = None
+    if _trading_engine:
+        trade_info = await _trading_engine.execute_trade_if_bullish(content, tickers)
+
+    # --- Task 4: Human-Persona Sync (Trade Post) ---
+    if trade_info:
+        trade_content = (
+            f"Just entered a long on ${trade_info['symbol'].replace('USDT', '')} at {trade_info['entry']:.4f}. "
+            f"Target is {trade_info['tp']:.4f}. Let's see if the bulls hold the line! 🚀📈 #Trading #BinanceSquare"
+        )
+        trade_post_result = await publish_post(trade_content)
+        if trade_post_result["success"]:
+            await state.add_log("info", f"Trade post published: {trade_post_result['post_url']}")
+
+    # --- Task 1: Publish & Cross-post ---
     result = await publish_post(content)
+    
+    # Cross-post to friend if configured
+    if FRIEND_SQUARE_API_KEY:
+        friend_result = await publish_post(content, api_key=FRIEND_SQUARE_API_KEY)
+        if friend_result["success"]:
+            await state.add_log("info", f"Cross-posted to friend account: {friend_result['post_url']}")
 
     # --- Update state ---
     if result["success"]:
-        state["posts_today"] += 1
-        state["posts_total"] += 1
-        state["last_post"] = {
-            "time": _now().isoformat(),
-            "persona": persona,
-            "status": "success",
-            "post_id": result["post_id"],
-            "post_url": result["post_url"],
-            "content_preview": content[:120] + "..." if len(content) > 120 else content,
-        }
-
-        _log_activity({
-            "event": "published",
+        await state.add_post({
+            "posted_date": datetime.utcnow().date().isoformat(),
             "persona": persona,
             "post_id": result["post_id"],
             "post_url": result["post_url"],
-            "content_preview": content[:120],
-            "posts_today": state["posts_today"],
+            "content": content
         })
 
-        logger.info(
-            f"✓ Published [{persona}] — Post #{state['posts_today']} today "
-            f"(#{state['posts_total']} total)"
-        )
+        await state.add_log("info", f"Published [{persona}] post to Binance Square")
+        return {"status": "success", "post_url": result["post_url"]}
     else:
-        state["last_post"] = {
-            "time": _now().isoformat(),
-            "persona": persona,
-            "status": "failed",
-            "error": result["error"],
-        }
-
-        _log_activity({
-            "event": "publish_failed",
-            "persona": persona,
-            "error": result["error"],
-            "content_preview": content[:120],
-        })
-
-        logger.error(f"✗ Publish failed [{persona}]: {result['error']}")
-
-    return {
-        "status": "success" if result["success"] else "failed",
-        "persona": persona,
-        "post_id": result.get("post_id"),
-    }
-
-
-def get_state() -> dict:
-    """Return a copy of the current engine state for the API."""
-    is_sleeping()  # Refresh sleep status
-    return {**state}
+        await state.add_log("error", f"Publishing failed: {result.get('error')}")
+        return {"status": "failed", "error": result.get("error")}

@@ -10,7 +10,7 @@ import asyncio
 
 import httpx
 
-from config import BINANCE_SQUARE_API_KEY, BINANCE_POST_URL
+from config import BINANCE_SQUARE_API_KEY, BINANCE_POST_URL, FRIEND_SQUARE_API_KEY
 
 logger = logging.getLogger("sentinel.publisher")
 
@@ -24,12 +24,13 @@ BASE_BACKOFF_SECONDS = 2.0
 # ---------------------------------------------------------------------------
 # Publish Post
 # ---------------------------------------------------------------------------
-async def publish_post(content: str) -> dict:
+async def publish_post(content: str, api_key: str = BINANCE_SQUARE_API_KEY) -> dict:
     """
     Publish a text post to Binance Square.
 
     Args:
         content: Plain text content (may include hashtags).
+        api_key: The Square API key to use.
 
     Returns:
         {
@@ -41,7 +42,7 @@ async def publish_post(content: str) -> dict:
     """
     headers = {
         "Content-Type": "application/json",
-        "X-Square-OpenAPI-Key": BINANCE_SQUARE_API_KEY,
+        "X-Square-OpenAPI-Key": api_key,
         "clienttype": "binanceSkill",
     }
 

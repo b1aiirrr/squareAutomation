@@ -1,24 +1,9 @@
-import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Sentinel-Square | Autonomous Content Engine",
-  description:
-    "Real-time monitoring dashboard for the Sentinel-Square autonomous content engine — AI-powered Binance Square posting with multi-persona generation.",
-  keywords: ["Binance Square", "AI", "Content Engine", "Crypto", "Dashboard"],
-  authors: [{ name: "Blair Momanyi" }],
+export const metadata = {
+  title: "Sentinel Square Dashboard",
+  description: "Command center for autonomous Binance Square content agent",
 };
+
+import "./globals.css";
 
 export default function RootLayout({
   children,
@@ -26,11 +11,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[#05080f]">{children}</body>
+    <html lang="en">
+      <body>{children}</body>
     </html>
   );
 }

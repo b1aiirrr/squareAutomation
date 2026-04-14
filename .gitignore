@@ -1,34 +1,49 @@
-# Environment variables (SECURITY CRITICAL)
-.env
-.env.local
-.env.production
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.so
 *.egg-info/
-dist/
-build/
-venv/
 .venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Runtime logs
-activity.log
-*.log
-
-# Node.js / Next.js
+# Node
 node_modules/
+.npm/
+.pnpm-store/
 .next/
 out/
+dist/
+coverage/
 
-# OS files
+# Logs
+*.log
+logs/
+
+# Env + secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+secrets*.json
+
+# OS / IDE
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+
+# Runtime data
+sentinel-square/sentinel-worker/data/posts.json
+sentinel-square/sentinel-worker/data/*.json
+
+# Build caches
+.cache/
+.tmp/
+tmp/

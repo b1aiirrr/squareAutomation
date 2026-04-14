@@ -32,6 +32,31 @@ def _require(key: str) -> str:
 # ---------------------------------------------------------------------------
 BINANCE_SQUARE_API_KEY: str = _require("BINANCE_SQUARE_API_KEY")
 GEMINI_API_KEY: str = _require("GEMINI_API_KEY")
+BINANCE_REFERRAL_LINK: str = os.getenv("BINANCE_REFERRAL_LINK", "")
+
+# Trading & Multi-Account
+TRADING_API_KEY: str = os.getenv("TRADING_API_KEY", "")
+TRADING_API_SECRET: str = os.getenv("TRADING_API_SECRET", "")
+FRIEND_SQUARE_API_KEY: str = os.getenv("FRIEND_SQUARE_API_KEY", "")
+
+# ---------------------------------------------------------------------------
+# Trading Settings
+# ---------------------------------------------------------------------------
+TRADE_PERCENT_OF_WALLET: float = 0.01  # 1%
+STOP_LOSS_PCT: float = 0.02           # -2%
+TAKE_PROFIT_PCT: float = 0.05         # +5%
+
+# ---------------------------------------------------------------------------
+# Monetization & Engagement
+# ---------------------------------------------------------------------------
+REFERRAL_CHANCE: float = 0.20  # 1 in 5 posts
+ENGAGEMENT_TRIGGERS: list[str] = [
+    "Drop your targets below 📉.",
+    "Is $BNB ready for the breakout or are we heading back to support?",
+    "What's your $BTC target for EOY?",
+    "Agree or am I missing something? Let me know in the comments.",
+    "Which $ALT are you watching this week?",
+]
 
 # ---------------------------------------------------------------------------
 # Schedule
