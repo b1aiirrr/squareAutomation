@@ -124,42 +124,21 @@ def save_posts(path, posts):
 # ---------------------------------------------------------------------------
 # Content Generation (Advanced)
 # ---------------------------------------------------------------------------
-def generate_content_mock(persona: str) -> tuple[str, list[str]]:
-    from .content_generator import CONTENT_TEMPLATES, ENGAGEMENT_TRIGGERS, SPECIAL_TICKERS, should_add_referral, format_referral_cta
+async def generate_content_advanced(persona: str) -> tuple[str, list[str]]:
+    from .content_generator import generate_content
+    
+    market_data = {}
+    if _trading_client:
+        try:
+            # Fetch real-time prices for top assets
+            tickers = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+            prices = _trading_client.get_all_tickers()
+            market_data = {p["symbol"].replace("USDT", ""): float(p["price"]) for p in prices if p["symbol"] in tickers}
+        except Exception as e:
+            logger.error(f"Failed to fetch market data: {e}")
 
-    templates = CONTENT_TEMPLATES.get(persona, CONTENT_TEMPLATES["community"])
-    template = random.choice(templates)
-
-    mock_prices = {
-        "BTC": 96450.0, "ETH": 3450.0, "BNB": 625.0, "SOL": 198.0,
-        "MATIC": 0.89, "ADA": 0.58, "AVAX": 38.50, "DOT": 7.85,
-        "LINK": 18.20, "ARB": 1.12
-    }
-
-    tickers_in_template = re.findall(r"\$[A-Z]{2,10}", template["hook"])
-    if not tickers_in_template:
-        tickers_in_template = [f"${random.choice(SPECIAL_TICKERS)}"]
-
-    tickers = [t.replace("$", "") for t in tickers_in_template]
-
-    content = template["hook"]
-    for ticker in tickers:
-        if ticker in mock_prices:
-            price = mock_prices[ticker]
-            if price > 1000:
-                content = content.replace("${}", f"${price:.0f}", 1)
-            else:
-                content = content.replace("${}", f"${price:.2f}", 1)
-
-    primary_ticker = tickers[0]
-    if f"${primary_ticker}" not in content:
-        content = content.replace("$", f"${primary_ticker} ", 1)
-
-    tags = " ".join([f"#{t}" for t in template["tags"]])
-    trigger = random.choice(ENGAGEMENT_TRIGGERS)
-    content = f"{content}\n\n{trigger}\n\n{tags}"
-
-    return content, [f"${t}" for t in tickers]
+    content, tickers = await generate_content(persona, market_data)
+    return content, tickers
 
 # ---------------------------------------------------------------------------
 # Trading Execution
@@ -260,7 +239,7 @@ async def run_cycle(state) -> dict:
     weights = list(persona_weights.values())
     persona = random.choices(personas, weights=weights, k=1)[0]
 
-    content, tickers = generate_content_mock(persona)
+    content, tickers = await generate_content_advanced(persona)
 
     # Execute trade if bullish
     trade_info = await execute_trade_if_bullish(content, tickers)

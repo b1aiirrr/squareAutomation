@@ -7,6 +7,56 @@ MAXIMIZES Write-to-Earn Rewards
 
 import random
 import re
+import os
+import logging
+from typing import Optional, Tuple, List
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
+logger = logging.getLogger("sentinel.generator")
+
+# ============================================================================
+# GEMINI AI CONFIGURATION
+# ============================================================================
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("Gemini AI configured successfully.")
+    except Exception as e:
+        logger.error(f"Failed to configure Gemini AI: {e}")
+        model = None
+else:
+    logger.warning("GEMINI_API_KEY not found. Falling back to templates.")
+    model = None
+
+# ============================================================================
+# HIGH-CONVICTION DEGENERATE ANALYST PERSONA
+# ============================================================================
+SYSTEM_PROMPT = """
+You are 'MOMIGI', a High-Conviction Degenerate Analyst on Binance Square.
+Your goal is to maximize engagement (Write-to-Earn) and build a cult-like following.
+
+STYLE RULES:
+- BOLD, CONTROVERSIAL, and AGGRESSIVE.
+- Use emotional language: 'Bloodbath', 'Moon mission', 'Smart money', 'Generational opportunity'.
+- Short sentences (max 10 words per line).
+- No mid-text hashtags.
+- Use specific $TICKERS (e.g., $BTC, $BNB).
+- Every post MUST start with a 'Pattern Interrupter' (a sharp 3-second hook).
+- Every post MUST end with 'Low-Effort' comment bait (e.g., '👇 or 👆').
+- Include 3-5 strategic hashtags at the end, always including #MOMIGIAlpha.
+- State copyright as 'MOMIGI 2026'; Version 2026.0.
+
+POST STRUCTURE:
+1. Hook (Pattern Interrupter)
+2. Body (Alpha Insight / Technical Summary)
+3. Chart Summary (using emojis)
+4. Comment Bait (Question/Prompt)
+5. Hashtags
+"""
 
 # ============================================================================
 # HIGH-CONVICTION DEGENERATE ANALYST PERSONA
@@ -199,7 +249,35 @@ MOCK_PRICES = {
 }
 
 
-def generate_content_mock(persona: str) -> tuple[str, list[str]]:
+async def generate_content(persona: str, market_data: Optional[dict] = None) -> Tuple[str, List[str]]:
+    """
+    Generate content using Gemini AI with fallback to templates.
+    """
+    if model:
+        try:
+            prompt = f"{SYSTEM_PROMPT}\n\nTask: Write a {persona} post about the current market."
+            if market_data:
+                prompt += f"\nMarket Data: {market_data}"
+            
+            response = await model.generate_content_async(prompt)
+            content = response.text.strip()
+            
+            # Extract tickers
+            tickers = re.findall(r"\$[A-Z]{2,10}", content)
+            
+            # Append dashboard link if not present
+            if "squareautomation.vercel.app" not in content:
+                content += DASHBOARD_LINK
+                
+            return content, list(set(tickers))
+        except Exception as e:
+            logger.error(f"Gemini generation failed: {e}. Falling back to templates.")
+
+    # Fallback to templates (existing logic)
+    return generate_content_mock(persona, market_data)
+
+
+def generate_content_mock(persona: str, market_data: Optional[dict] = None) -> Tuple[str, List[str]]:
     """
     Generate HIGH-CONVICTION content optimized for Write-to-Earn.
     Every post follows the formula:
@@ -226,9 +304,10 @@ def generate_content_mock(persona: str) -> tuple[str, list[str]]:
 
     # Format the body with prices
     body = template["body"]
+    prices = {**MOCK_PRICES, **(market_data or {})}
     for ticker in tickers:
-        if ticker in MOCK_PRICES:
-            price = MOCK_PRICES[ticker]
+        if ticker in prices:
+            price = prices[ticker]
             # Replace first occurrence of ${} with actual price
             if "${}" in body:
                 if price > 1000:
@@ -244,7 +323,7 @@ def generate_content_mock(persona: str) -> tuple[str, list[str]]:
 
     # If still ${} left, replace with target price
     if "${}" in body:
-        target_price = MOCK_PRICES.get(ticker, 1000) * 1.1
+        target_price = prices.get(ticker, 1000) * 1.1
         if target_price > 1000:
             body = body.replace("${}", f"${target_price:.0f}")
         else:

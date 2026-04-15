@@ -45,6 +45,13 @@ class TradingEngine:
         ]
         is_bullish = any(ind in content.lower() for ind in bullish_indicators)
 
+        # AI-driven sentiment analysis
+        ai_sentiment_score = await self._get_ai_sentiment(content)
+        if ai_sentiment_score > 0.7:
+            is_bullish = True
+        elif ai_sentiment_score < 0.3:
+            is_bullish = False
+
         if not is_bullish or not tickers:
             return None
 
@@ -116,6 +123,31 @@ class TradingEngine:
             logger.error(f"General trading error: {e}")
 
         return None
+
+    async def _get_ai_sentiment(self, content: str) -> float:
+        """
+        Use Gemini AI to get a sentiment score (0.0 to 1.0) for the content.
+        """
+        import google.generativeai as genai
+        import os
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return 0.5 # Neutral
+            
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            prompt = f"Analyze the sentiment of the following crypto post. Return ONLY a single number between 0.0 (extremely bearish) and 1.0 (extremely bullish).\n\nPost: {content}"
+            response = await model.generate_content_async(prompt)
+            score_str = response.text.strip()
+            # Extract the first number found in the response
+            match = re.search(r"(\d+\.\d+|\d+)", score_str)
+            if match:
+                return float(match.group(1))
+        except Exception as e:
+            logger.error(f"AI Sentiment Analysis failed: {e}")
+            
+        return 0.5 # Default to neutral
 
     async def _analyze_symbol(self, symbol: str) -> dict:
         """

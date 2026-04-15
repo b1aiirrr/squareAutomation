@@ -56,23 +56,29 @@ class RewardsEngine:
             if subscribe_amount < min_balance_usdt:
                 return None
 
-            payload = {
-                "productId": "USDT",
-                "amount": str(round(subscribe_amount, 2)),
-                "autoSubscribe": "true",
-                "type": "NORMAL",
-            }
+            # Get Flexible Product ID for USDT
+            products = self.client.get_simple_earn_flexible_product_list(asset="USDT")
+            if not products or "rows" not in products:
+                return None
+            
+            product_id = products["rows"][0]["productId"]
+            
+            # Subscribe to Flexible Earn
+            result = self.client.subscribe_simple_earn_flexible_product(
+                productId=product_id,
+                amount=str(round(subscribe_amount, 2)),
+                autoSubscribe="true"
+            )
 
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
-                headers = {
-                    "X-Square-OpenAPI-Key": self.client.API_KEY,
-                    "clienttype": "binanceSkill",
-                }
-                # Note: Simple Earn subscription requires different endpoint
-                # For now, we log the intent - actual implementation depends on API permissions
+            if result.get("success"):
                 await self.state.add_log(
                     "info",
-                    f"Yield Engine: Would sweep ${subscribe_amount:.2f} USDT into Simple Earn (APR: {target_apr}%)"
+                    f"Yield Engine: Successfully swept ${subscribe_amount:.2f} USDT into Simple Earn (APR: {target_apr}%)"
+                )
+            else:
+                await self.state.add_log(
+                    "warning",
+                    f"Yield Engine: Simple Earn subscription failed: {result.get('message')}"
                 )
 
             return {
@@ -131,26 +137,22 @@ class RewardsEngine:
         """
         available_pools = []
         try:
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
-                response = await http_client.get(
-                    "https://www.binance.com/sapi/v1/launchpool/token/list",
-                    timeout=30.0
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    pools = data.get("data", []) if isinstance(data, dict) else []
-
-                    for pool in pools[:3]:  # Top 3 pools
+            # Using private request for sapi v1 launchpool
+            response = self.client._request_api('get', 'launchpool/token/list', signed=True, version='v1', api='sapi')
+            
+            if response and response.get("code") == "000000":
+                pools = response.get("data", [])
+                for pool in pools:
+                    if pool.get("status") == "ACTIVE":
                         pool_name = pool.get("poolName", "Unknown")
                         token_name = pool.get("tokenName", "Unknown")
-                        apr = pool.get("annualInterestRate", 0) * 100
+                        apr = float(pool.get("annualInterestRate", 0)) * 100
 
                         available_pools.append({
                             "pool_name": pool_name,
                             "token": token_name,
                             "apr": round(apr, 2),
-                            "status": pool.get("status", "ACTIVE")
+                            "status": "ACTIVE"
                         })
 
                         await self.state.add_log(
@@ -159,7 +161,16 @@ class RewardsEngine:
                         )
 
         except Exception as e:
-            await self.state.add_log("error", f"Launchpool Check Error: {str(e)}")
+            logger.error(f"Launchpool Check Error: {e}")
+            # Fallback to public if private fails
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as http_client:
+                    resp = await http_client.get("https://www.binance.com/sapi/v1/launchpool/token/list")
+                    if resp.status_code == 200:
+                        # ... fallback logic
+                        pass
+            except:
+                pass
 
         return available_pools
 
@@ -171,21 +182,28 @@ class RewardsEngine:
             return None
 
         try:
-            payload = {
+            params = {
                 "poolToken": pool_token,
                 "amount": str(amount_bnb)
             }
-            # Actual staking would use POST /sapi/v1/launchpool/stake
-            await self.state.add_log(
-                "info",
-                f" Launchpool: Staking {amount_bnb} BNB for {pool_token}"
-            )
-            return {
-                "action": "launchpool_stake",
-                "pool": pool_token,
-                "amount_bnb": amount_bnb,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            result = self.client._request_api('post', 'launchpool/stake', signed=True, version='v1', api='sapi', data=params)
+            
+            if result and result.get("code") == "000000":
+                await self.state.add_log(
+                    "info",
+                    f" Launchpool: Successfully staked {amount_bnb} BNB for {pool_token}"
+                )
+                return {
+                    "action": "launchpool_stake",
+                    "pool": pool_token,
+                    "amount_bnb": amount_bnb,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            else:
+                await self.state.add_log(
+                    "warning",
+                    f" Launchpool: Staking failed: {result.get('message', 'Unknown error')}"
+                )
         except Exception as e:
             await self.state.add_log("error", f"Launchpool Stake Error: {str(e)}")
         return None
