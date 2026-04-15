@@ -50,6 +50,11 @@ STYLE RULES:
 - Include 3-5 strategic hashtags at the end, always including #MOMIGIAlpha.
 - State copyright as 'MOMIGI 2026'; Version 2026.0.
 
+TRENDING TOPICS:
+- If trending topics are provided, integrate them naturally into the post.
+- If a campaign topic (like PIXEL or a specific project) is provided, prioritize it and meet any length/tag requirements.
+- Mention specific project accounts (e.g., @Pixels) if requested for a campaign.
+
 POST STRUCTURE:
 1. Hook (Pattern Interrupter)
 2. Body (Alpha Insight / Technical Summary)
@@ -249,7 +254,7 @@ MOCK_PRICES = {
 }
 
 
-async def generate_content(persona: str, market_data: Optional[dict] = None) -> Tuple[str, List[str]]:
+async def generate_content(persona: str, market_data: Optional[dict] = None, trending_topics: Optional[list] = None) -> Tuple[str, List[str]]:
     """
     Generate content using Gemini AI with fallback to templates.
     """
@@ -258,6 +263,8 @@ async def generate_content(persona: str, market_data: Optional[dict] = None) -> 
             prompt = f"{SYSTEM_PROMPT}\n\nTask: Write a {persona} post about the current market."
             if market_data:
                 prompt += f"\nMarket Data: {market_data}"
+            if trending_topics:
+                prompt += f"\nTrending Topics to include: {trending_topics}"
             
             response = await model.generate_content_async(prompt)
             content = response.text.strip()

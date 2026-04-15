@@ -37,6 +37,24 @@ BINANCE_REFERRAL_LINK = os.getenv("BINANCE_REFERRAL_LINK", "")
 REFERRAL_CHANCE = 0.20
 
 BINANCE_POST_URL = "https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add"
+BINANCE_TRENDING_URL = "https://www.binance.com/bapi/composite/v1/public/pgc/square/trending/topic/list"
+
+# ---------------------------------------------------------------------------
+# Trending Topics & Campaigns
+# ---------------------------------------------------------------------------
+async def fetch_trending_topics() -> list[dict]:
+    """Fetch real-time trending topics from Binance Square."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Note: This is a public BAPI endpoint used by the web UI
+            response = await client.get(BINANCE_TRENDING_URL)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == "000000":
+                    return data.get("data", [])[:5] # Top 5
+    except Exception as e:
+        logger.error(f"Failed to fetch trending topics: {e}")
+    return []
 
 # ---------------------------------------------------------------------------
 # Sleep Window
@@ -137,7 +155,10 @@ async def generate_content_advanced(persona: str) -> tuple[str, list[str]]:
         except Exception as e:
             logger.error(f"Failed to fetch market data: {e}")
 
-    content, tickers = await generate_content(persona, market_data)
+    # Fetch trending topics
+    trending_topics = await fetch_trending_topics()
+
+    content, tickers = await generate_content(persona, market_data, trending_topics)
     return content, tickers
 
 # ---------------------------------------------------------------------------
