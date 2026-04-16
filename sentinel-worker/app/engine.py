@@ -24,8 +24,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TIMEZONE = os.getenv("TIMEZONE", "Africa/Nairobi")
-SLEEP_START_HOUR = int(os.getenv("SLEEP_WINDOW_START", "2"))
-SLEEP_END_HOUR = int(os.getenv("SLEEP_WINDOW_END", "7"))
+SLEEP_START_HOUR = int(os.getenv("SLEEP_WINDOW_START", "2").split(":")[0])
+SLEEP_END_HOUR = int(os.getenv("SLEEP_WINDOW_END", "7").split(":")[0])
 DAILY_POST_TARGET = int(os.getenv("DAILY_POST_TARGET", "40"))
 
 BINANCE_SQUARE_API_KEY = os.getenv("BINANCE_SQUARE_API_KEY", "")
