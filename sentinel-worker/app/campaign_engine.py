@@ -114,9 +114,19 @@ async def execute_pixel_post(state, is_long: bool):
     if BINANCE_SQUARE_API_KEY:
         res = await publish_to_square(content, BINANCE_SQUARE_API_KEY)
         if res["success"]:
-            await state.add_log("info", f"🟢 PIXEL Campaign {post_type} Published!")
+            await state.add_log("info", f"🟢 PIXEL Campaign {post_type} Published (Primary)!")
         else:
             await state.add_log("error", f"❌ Primary PIXEL {post_type} failed: {res.get('error')}")
+            
+    # Friend Publish
+    if FRIEND_SQUARE_API_KEY:
+        # Small delay between cross-posting to avoid hitting API limits simultaneously
+        await asyncio.sleep(5)
+        friend_res = await publish_to_square(content, FRIEND_SQUARE_API_KEY)
+        if friend_res["success"]:
+            await state.add_log("info", f"🟢 PIXEL Campaign {post_type} Published (Friend)!")
+        else:
+            await state.add_log("error", f"❌ Friend PIXEL {post_type} failed: {friend_res.get('error')}")
 
 async def run_pixel_campaign(state, client):
     """Orchestrates the 3 campaign tasks with random timer delays."""
