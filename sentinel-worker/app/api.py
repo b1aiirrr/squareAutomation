@@ -1,24 +1,77 @@
 """
-Sentinel-Square Status API
-============================
+Sentinel-Square Status API v5.1
+================================
 FastAPI server exposing engine state, log history, and real-time log
 streaming via Server-Sent Events (SSE). Runs on port 8585.
+
+The scheduler is started/stopped via the lifespan context manager,
+ensuring it shares the same asyncio event loop as the API.
 """
 
+import sys
 import json
 import asyncio
 import logging
 from pathlib import Path
 from collections import deque
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
+# Ensure parent sentinel-worker/ directory is on sys.path for config
+_worker_dir = str(Path(__file__).parent.parent)
+if _worker_dir not in sys.path:
+    sys.path.insert(0, _worker_dir)
+
 from config import ALLOWED_ORIGINS, LOG_FILE
 from .engine import get_state
+from .state import SharedState
+from .scheduler import Scheduler
 
 logger = logging.getLogger("sentinel.api")
+
+# ---------------------------------------------------------------------------
+# Shared State & Scheduler (module-level for access by endpoints)
+# ---------------------------------------------------------------------------
+_state = SharedState()
+_scheduler_instance = None
+
+
+# ---------------------------------------------------------------------------
+# Lifespan — starts/stops the scheduler on the SAME event loop as the API
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app):
+    """
+    FastAPI lifespan handler.
+    Startup: initializes the scheduler on uvicorn's event loop.
+    Shutdown: gracefully stops the scheduler.
+    """
+    global _scheduler_instance
+
+    logger.info("Lifespan startup: initializing scheduler on API event loop...")
+
+    posts_path = Path(__file__).parent.parent / "posts.json"
+    _scheduler_instance = Scheduler(_state, posts_path)
+
+    # Start the scheduler — APScheduler attaches to the CURRENT (uvicorn's) event loop
+    await _scheduler_instance.run()
+
+    # Store state in engine so get_state() works
+    from .engine import set_state
+    set_state(_state)
+
+    logger.info("Scheduler is now running on the API event loop ✓")
+    yield
+
+    # Shutdown
+    logger.info("Lifespan shutdown: stopping scheduler...")
+    if _scheduler_instance:
+        _scheduler_instance.stop_scheduler()
+    logger.info("Scheduler stopped cleanly ✓")
+
 
 # ---------------------------------------------------------------------------
 # App
@@ -26,7 +79,8 @@ logger = logging.getLogger("sentinel.api")
 app = FastAPI(
     title="Sentinel-Square API",
     description="Status & monitoring API for the Sentinel-Square content engine",
-    version="4.0.0",
+    version="5.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -44,7 +98,12 @@ app.add_middleware(
 @app.get("/api/status")
 async def status():
     """Return current engine state."""
-    return get_state()
+    state = get_state()
+    if state and hasattr(state, 'snapshot'):
+        return await state.snapshot()
+    elif state:
+        return state
+    return {"status": "initializing"}
 
 
 @app.get("/api/logs/history")
@@ -100,7 +159,7 @@ async def log_stream(request: Request):
                                 yield {"event": "log", "data": line}
                     last_size = current_size
 
-            # Also send a heartbeat every 15s to keep the connection alive
+            # Heartbeat every 15s to keep the connection alive
             yield {"event": "heartbeat", "data": "ping"}
             await asyncio.sleep(3)
 
@@ -110,4 +169,4 @@ async def log_stream(request: Request):
 @app.get("/api/health")
 async def health():
     """Simple health check endpoint."""
-    return {"status": "ok", "service": "sentinel-square-worker"}
+    return {"status": "ok", "service": "sentinel-square-worker", "version": "5.1.0"}

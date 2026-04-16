@@ -1,78 +1,23 @@
 """
-Sentinel-Square — Main Entry Point
-====================================
-Starts the FastAPI status server and the content scheduling engine.
-Run with: python main.py
+Sentinel-Square — PM2 Entry Point
+===================================
+This is the entry point that PM2 runs on the server.
+It delegates to the app package which contains the actual logic.
+
+PM2 command:
+    pm2 start "cd /opt/squareAutomation/sentinel-worker && venv/bin/python main.py"
 """
 
-import signal
-import logging
-import uvicorn
+import sys
+from pathlib import Path
 
-from config import API_HOST, API_PORT
+# Ensure the sentinel-worker directory is on sys.path
+_worker_dir = str(Path(__file__).parent)
+if _worker_dir not in sys.path:
+    sys.path.insert(0, _worker_dir)
 
-# ---------------------------------------------------------------------------
-# Logging Setup
-# ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s │ %(name)-22s │ %(levelname)-7s │ %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
-logger = logging.getLogger("sentinel")
-
-# ---------------------------------------------------------------------------
-# Banner
-# ---------------------------------------------------------------------------
-BANNER = r"""
-  ____  _____ _   _ _____ ___ _   _ _____ _
- / ___|| ____| \ | |_   _|_ _| \ | | ____| |
- \___ \|  _| |  \| | | |  | ||  \| |  _| | |
-  ___) | |___| |\  | | |  | || |\  | |___| |___
- |____/|_____|_| \_| |_| |___|_| \_|_____|_____|
-  ____   ___  _   _   _    ____  _____
- / ___| / _ \| | | | / \  |  _ \| ____|
- \___ \| | | | | | |/ _ \ | |_) |  _|
-  ___) | |_| | |_| / ___ \|  _ <| |___
- |____/ \__\_\\___/_/   \_\_| \_\_____|   v4.0
-
- Autonomous Content Engine for Binance Square
- by Blair Momanyi
-"""
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-def main():
-    print(BANNER)
-    logger.info("Starting Sentinel-Square Worker v4.0")
-
-    # Import here to avoid circular imports during config validation
-    from scheduler import start_scheduler, stop_scheduler
-    from api import app
-
-    # --- Graceful shutdown ---
-    def _shutdown(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down...")
-        stop_scheduler()
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
-
-    # --- Start scheduler ---
-    start_scheduler()
-
-    # --- Start API server ---
-    logger.info(f"API server starting on {API_HOST}:{API_PORT}")
-    uvicorn.run(
-        app,
-        host=API_HOST,
-        port=API_PORT,
-        log_level="warning",  # Reduce uvicorn noise
-    )
-
+# Launch the app
+from app.main import main
 
 if __name__ == "__main__":
     main()
