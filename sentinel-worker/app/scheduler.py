@@ -26,6 +26,7 @@ from config import (
 )
 from .engine import run_cycle, daily_reset, recalculate_sleep_window, init_trading, load_posts, save_posts, get_state
 from .rewards_engine import RewardsEngine
+from .campaign_engine import run_pixel_campaign
 from binance.client import Client
 
 logger = logging.getLogger("sentinel.scheduler")
@@ -39,12 +40,13 @@ class Scheduler:
         self.posts_path = posts_path
         self.scheduler = AsyncIOScheduler(timezone=_tz)
         self.rewards_engine = None
+        self.client = None
 
         # Initialize Binance client for rewards
         if TRADING_API_KEY and TRADING_API_SECRET:
             try:
-                client = Client(TRADING_API_KEY, TRADING_API_SECRET)
-                self.rewards_engine = RewardsEngine(state, client)
+                self.client = Client(TRADING_API_KEY, TRADING_API_SECRET)
+                self.rewards_engine = RewardsEngine(state, self.client)
                 logger.info("Rewards Engine initialized successfully")
             except Exception as e:
                 logger.error(f"Failed to init Rewards Engine: {e}")
@@ -135,6 +137,14 @@ class Scheduler:
                 replace_existing=True,
             )
 
+        # Daily PIXEL Campaign
+        self.scheduler.add_job(
+            self._pixel_campaign_job,
+            trigger=CronTrigger(hour=14, minute=0, timezone=_tz), # Runs at 2 PM local time
+            id="daily_pixel_campaign",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         logger.info(f"Scheduler started. First cycle in {warm_up} min ({first_run.strftime('%H:%M:%S')} {TIMEZONE})")
 
@@ -158,6 +168,12 @@ class Scheduler:
                     f" Launchpools: {len(pools)} active | Top: {pools[0].get('token', 'N/A')} @ {pools[0].get('apr', 0)}%"
                 )
 
+    async def _pixel_campaign_job(self):
+        """Daily PIXEL campaign tasks."""
+        try:
+            await run_pixel_campaign(self.state, self.client)
+        except Exception as e:
+            logger.error(f"Daily PIXEL campaign failed: {e}", exc_info=True)
 
 _scheduler = None
 
