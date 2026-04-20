@@ -64,9 +64,9 @@ ENGAGEMENT_TRIGGERS: list[str] = [
 TIMEZONE: str = os.getenv("TIMEZONE", "Africa/Nairobi")
 SLEEP_START_HOUR: int = int(os.getenv("SLEEP_START_HOUR", "2"))
 SLEEP_END_HOUR: int = int(os.getenv("SLEEP_END_HOUR", "7"))
-MIN_INTERVAL_MINUTES: int = int(os.getenv("MIN_INTERVAL_MINUTES", "17"))
-MAX_INTERVAL_MINUTES: int = int(os.getenv("MAX_INTERVAL_MINUTES", "78"))
-DAILY_POST_TARGET: int = int(os.getenv("DAILY_POST_TARGET", "40"))
+MIN_INTERVAL_MINUTES: int = 15
+MAX_INTERVAL_MINUTES: int = 30
+DAILY_POST_TARGET: int = 60
 
 # ---------------------------------------------------------------------------
 # Binance Square API
@@ -92,7 +92,7 @@ API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
 API_PORT: int = int(os.getenv("API_PORT", "8585"))
 ALLOWED_ORIGINS: list[str] = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,https://sentinel-square.vercel.app",
+    "http://localhost:3000,https://sentinel-square.vercel.app,https://squareautomation.vercel.app",
 ).split(",")
 
 # ---------------------------------------------------------------------------
