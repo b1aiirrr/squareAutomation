@@ -1,5 +1,11 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "rewrites": [
+    {
+      "source": "/api-worker/:path*",
+      "destination": "http://46.101.66.34:8585/:path*"
+    }
+  ]
 }

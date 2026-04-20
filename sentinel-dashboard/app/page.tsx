@@ -6,7 +6,7 @@ import { ActivityLog } from "@/components/activity-log";
 import { StatusPulse } from "@/components/status-pulse";
 import { WorkerStatus } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8585";
+const API_BASE = "/api-worker/api";
 
 const initialStatus: WorkerStatus = {
   status: "offline",
