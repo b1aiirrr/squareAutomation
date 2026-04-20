@@ -200,7 +200,7 @@ async def execute_trade_if_bullish(content: str, tickers: list[str]) -> dict | N
         quantity = round(trade_amount / current_price, 4)
 
         if _state:
-            await _state.add_log("info", f"SMART BUY: {quantity} {ticker} (~\${trade_amount:.2f})")
+            await _state.add_log("info", f"SMART BUY: {quantity} {ticker} (~${trade_amount:.2f})")
 
         order = _trading_client.order_market_buy(symbol=symbol, quantity=quantity)
 
