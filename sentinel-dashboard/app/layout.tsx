@@ -1,16 +1,20 @@
 export const metadata = {
-  title: "MOMIGI 2026 | High-Conviction Degenerate Analyst Dashboard",
-  description: "Official real-time monitoring dashboard for the MOMIGI 2026 autonomous Binance Square agent. Maximizing Write-to-Earn rewards and yield optimization.",
-  keywords: ["MOMIGI", "Binance Square", "Write to Earn", "Crypto Analyst", "Yield Optimization", "Autonomous Trading"],
+  title: "Sentinel-Square | Autonomous Content & Trading Engine",
+  description: "Official real-time monitoring dashboard for the Sentinel-Square autonomous Binance Square agent. Maximizing Write-to-Earn rewards and yield optimization.",
+  keywords: ["Sentinel-Square", "Binance Square", "Write to Earn", "Crypto Analyst", "Yield Optimization", "Autonomous Trading"],
   authors: [{ name: "MOMIGI 2026" }],
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
   openGraph: {
-    title: "MOMIGI 2026 | High-Conviction Analyst Dashboard",
-    description: "Real-time alpha and yield monitoring for MOMIGI 2026.",
+    title: "Sentinel-Square | Autonomous Analyst Dashboard",
+    description: "Real-time alpha and yield monitoring for Sentinel-Square.",
     url: "https://squareautomation.vercel.app",
-    siteName: "MOMIGI 2026",
+    siteName: "Sentinel-Square",
     images: [
       {
-        url: "/og-image.png",
+        url: "/logo.png",
         width: 1200,
         height: 630,
       },
@@ -29,7 +33,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="relative">
+        {/* Aura Background Blobs */}
+        <div className="aura-blob bg-cyan-500 w-[500px] h-[500px] -top-64 -left-64" />
+        <div className="aura-blob bg-purple-500 w-[400px] h-[400px] top-1/2 -right-32 delay-1000" />
+        <div className="aura-blob bg-blue-500 w-[600px] h-[600px] -bottom-96 left-1/2 -translate-x-1/2 opacity-10" />
+        
+        <div className="relative z-10">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
